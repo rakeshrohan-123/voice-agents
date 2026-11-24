@@ -7,19 +7,19 @@ import {
   PhoneOff, 
   PhoneCall, 
   Bot, 
-  User, 
   Zap, 
-  Volume2, 
   RotateCcw,
   Send,
-  Headphones
+  Volume2
 } from 'lucide-react';
+import api from '../services/api';
 
 interface ChatMessage {
   id: string;
   sender: 'agent' | 'user';
   text: string;
   time: string;
+  isAudioPlaying?: boolean;
 }
 
 export const PlaygroundPage: React.FC = () => {
@@ -30,12 +30,14 @@ export const PlaygroundPage: React.FC = () => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [inputText, setInputText] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [sarvamAudioActive, setSarvamAudioActive] = useState(false);
   const chatBottomRef = useRef<HTMLDivElement>(null);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   const agents = [
-    { id: 'agent_1', name: 'Loan Recovery Agent', lang: 'Hindi (हिंदी)', voice: 'Aravind', greeting: 'नमस्ते! मैं एचडीएफसी बैंक रिकवरी टीम से बात कर रहा हूँ। क्या मेरी बात श्री राजेश जी से हो रही है?' },
-    { id: 'agent_2', name: 'COD Order Verification', lang: 'Hinglish', voice: 'Priya', greeting: 'Hello! Main Myntra logistics team se bol rahi hoon. Aapka order delivery address confirm karna hai.' },
-    { id: 'agent_3', name: 'Tamil Real-Estate Bot', lang: 'Tamil (தமிழ்)', voice: 'Murugan', greeting: 'வணக்கம்! சென்னை OMR புதிய வில்லா புராஜெக்ட் பற்றி விசாரிக்க ஆசைப்பட்டீர்களா?' },
+    { id: 'agent_1', name: 'Loan Recovery Agent', lang: 'hi-IN', voice: 'priya', greeting: 'नमस्ते! मैं एचडीएफसी बैंक रिकवरी टीम से बात कर रहा हूँ। क्या मेरी बात श्री राजेश जी से हो रही है?' },
+    { id: 'agent_2', name: 'COD Order Verification', lang: 'en-IN', voice: 'priya', greeting: 'Hello! I am calling from the logistics team to confirm your Cash on Delivery order address.' },
+    { id: 'agent_3', name: 'Tamil Real-Estate Bot', lang: 'ta-IN', voice: 'gokul', greeting: 'வணக்கம்! சென்னை OMR புதிய வில்லா புராஜெக்ட் பற்றி விசாரிக்க ஆசைப்பட்டீர்களா?' },
   ];
 
   const currentAgent = agents.find(a => a.id === selectedAgent) || agents[0];
@@ -44,8 +46,41 @@ export const PlaygroundPage: React.FC = () => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isSpeaking]);
 
-  const speakText = (text: string) => {
+  const playBase64Audio = (base64Audio: string, fallbackText: string) => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
+
+    if (base64Audio) {
+      try {
+        const audioSrc = `data:audio/wav;base64,${base64Audio}`;
+        const audio = new Audio(audioSrc);
+        currentAudioRef.current = audio;
+        setIsSpeaking(true);
+        setSarvamAudioActive(true);
+
+        audio.onended = () => {
+          setIsSpeaking(false);
+          setSarvamAudioActive(false);
+        };
+        audio.onerror = () => {
+          speakFallback(fallbackText);
+        };
+        audio.play().catch(() => {
+          speakFallback(fallbackText);
+        });
+        return;
+      } catch (err) {
+        console.error('Audio play error, falling back to speech synthesis', err);
+      }
+    }
+    speakFallback(fallbackText);
+  };
+
+  const speakFallback = (text: string) => {
     setIsSpeaking(true);
+    setSarvamAudioActive(false);
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.rate = 1.0;
@@ -54,7 +89,7 @@ export const PlaygroundPage: React.FC = () => {
     window.speechSynthesis.speak(utterance);
   };
 
-  const startCall = () => {
+  const startCall = async () => {
     if (!consumeCall(1)) {
       alert('Plan call quota exceeded! Please upgrade your plan in Plans & Billing.');
       return;
@@ -67,42 +102,58 @@ export const PlaygroundPage: React.FC = () => {
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setMessages([greetingMsg]);
-    speakText(currentAgent.greeting);
+
+    // Request native Sarvam TTS audio from backend API
+    try {
+      const resp = await api.post('/voice/tts', {
+        text: currentAgent.greeting,
+        language_code: currentAgent.lang,
+        speaker: currentAgent.voice
+      });
+      if (resp.data && resp.data.audio_base64) {
+        playBase64Audio(resp.data.audio_base64, currentAgent.greeting);
+      } else {
+        speakFallback(currentAgent.greeting);
+      }
+    } catch {
+      speakFallback(currentAgent.greeting);
+    }
   };
 
   const endCall = () => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+    }
     window.speechSynthesis.cancel();
     setIsCallActive(false);
     setIsSpeaking(false);
+    setSarvamAudioActive(false);
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim() || !isCallActive) return;
 
+    const userText = inputText;
     const userMsg: ChatMessage = {
       id: 'msg_' + Date.now(),
       sender: 'user',
-      text: inputText,
+      text: userText,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
     setMessages(prev => [...prev, userMsg]);
-    const query = inputText;
     setInputText('');
 
-    // Simulate Sarvam Agent Response
-    setTimeout(() => {
-      let reply = '';
-      if (currentAgent.lang.includes('Hindi')) {
-        reply = query.toLowerCase().includes('haan') || query.toLowerCase().includes('yes')
-          ? 'बहुत धन्यवाद पुष्टि के लिए। आपका 4,500 रुपये का ईएमआई 3 दिन से बाकी है। क्या मैं अभी यूपीआई लिंक एसएमएस कर दूँ?'
-          : 'जी, मैं समझ सकता हूँ। क्या आप बता सकते हैं कि आप कब तक भुगतान करने में सक्षम होंगे?';
-      } else if (currentAgent.lang.includes('Tamil')) {
-        reply = 'மிக்க நன்றி! எங்கள் விற்பனை நிர்வாகி நாளை காலை உங்களை தொடர்பு கொள்வார்.';
-      } else {
-        reply = 'Thank you for confirming. I have updated your delivery slot to today evening. You will receive an SMS confirmation.';
-      }
+    try {
+      // Call backend API with Sarvam AI reasoning & Bulbul TTS
+      const resp = await api.post('/voice/chat', {
+        agent_id: currentAgent.id,
+        message: userText,
+        language: currentAgent.lang
+      });
 
+      const reply = resp.data.reply || 'धन्यवाद। आपका अनुरोध दर्ज कर लिया गया है।';
       const agentReply: ChatMessage = {
         id: 'msg_' + Date.now(),
         sender: 'agent',
@@ -110,8 +161,24 @@ export const PlaygroundPage: React.FC = () => {
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       };
       setMessages(prev => [...prev, agentReply]);
-      speakText(reply);
-    }, 450);
+
+      if (resp.data.audio_base64) {
+        playBase64Audio(resp.data.audio_base64, reply);
+      } else {
+        speakFallback(reply);
+      }
+    } catch (err) {
+      console.error('Chat error:', err);
+      const fallbackReply = 'जी, मैं आपकी बात समझ गया हूँ। क्या मैं आपकी कुछ और मदद कर सकता हूँ?';
+      const agentReply: ChatMessage = {
+        id: 'msg_' + Date.now(),
+        sender: 'agent',
+        text: fallbackReply,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      };
+      setMessages(prev => [...prev, agentReply]);
+      speakFallback(fallbackReply);
+    }
   };
 
   return (
@@ -125,7 +192,7 @@ export const PlaygroundPage: React.FC = () => {
             <span>Interactive Voice Playground</span>
           </h1>
           <p className="text-xs text-slate-400 mt-1">
-            Simulate real-time full-duplex conversational voice sessions with Sarvam Indic models.
+            Connected to <strong>Sarvam Bulbul:v3 API</strong> for real-time Indic neural speech synthesis.
           </p>
         </div>
 
@@ -162,11 +229,11 @@ export const PlaygroundPage: React.FC = () => {
             <div className="w-full flex items-center justify-between pb-3 border-b border-white/5">
               <div className="flex items-center space-x-2 text-left">
                 <div className="w-8 h-8 rounded-full bg-brand-600/30 text-brand-300 flex items-center justify-center font-bold text-xs">
-                  {currentAgent.voice.charAt(0)}
+                  {currentAgent.voice.charAt(0).toUpperCase()}
                 </div>
                 <div>
                   <p className="text-xs font-bold text-white">{currentAgent.name}</p>
-                  <p className="text-[10px] text-slate-400">{currentAgent.lang} • {currentAgent.voice}</p>
+                  <p className="text-[10px] text-slate-400">{currentAgent.lang} • Sarvam Bulbul:v3</p>
                 </div>
               </div>
               <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
@@ -174,7 +241,7 @@ export const PlaygroundPage: React.FC = () => {
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 animate-pulse' 
                   : 'bg-slate-800 text-slate-400'
               }`}>
-                {isCallActive ? (isSpeaking ? 'Agent Speaking' : 'Listening...') : 'Ready to Connect'}
+                {isCallActive ? (isSpeaking ? (sarvamAudioActive ? 'Sarvam AI Speaking' : 'Speaking...') : 'Listening...') : 'Ready to Connect'}
               </span>
             </div>
 
@@ -201,8 +268,8 @@ export const PlaygroundPage: React.FC = () => {
 
               <p className="mt-6 text-xs text-slate-400">
                 {isCallActive 
-                  ? (isSpeaking ? 'Synthesizing voice in Indic tone...' : 'Speak or type your response below') 
-                  : 'Press "Start Call Simulation" to talk'}
+                  ? (isSpeaking ? 'Streaming Sarvam 8kHz audio waveform...' : 'Type your answer or query below') 
+                  : 'Press "Start Voice Call" to test live audio'}
               </p>
             </div>
 
@@ -273,7 +340,7 @@ export const PlaygroundPage: React.FC = () => {
           <div className="flex items-center justify-between pb-3 border-b border-white/5">
             <div>
               <h3 className="text-sm font-bold text-white">Live Conversation Transcript</h3>
-              <p className="text-xs text-slate-400">Bidirectional text stream with automatic translation</p>
+              <p className="text-xs text-slate-400">Directly connected to Sarvam AI voice engine</p>
             </div>
             {messages.length > 0 && (
               <button
@@ -293,7 +360,7 @@ export const PlaygroundPage: React.FC = () => {
               <div className="h-full flex flex-col items-center justify-center text-center p-8 text-slate-500">
                 <Bot className="w-10 h-10 mb-2 opacity-40" />
                 <p className="text-xs">No active conversation yet.</p>
-                <p className="text-[11px] text-slate-600 mt-0.5">Start call simulation to begin talking with the agent.</p>
+                <p className="text-[11px] text-slate-600 mt-0.5">Click "Start Voice Call" to hear the live Sarvam voice.</p>
               </div>
             ) : (
               messages.map((msg) => (
@@ -327,14 +394,14 @@ export const PlaygroundPage: React.FC = () => {
             <div ref={chatBottomRef} />
           </div>
 
-          {/* User Input Fallback Bar */}
+          {/* User Input Bar */}
           <form onSubmit={handleSendMessage} className="pt-3 border-t border-white/5 flex items-center space-x-2">
             <input
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               disabled={!isCallActive}
-              placeholder={isCallActive ? "Type what you'd say to the agent..." : "Start call to test speaking..."}
+              placeholder={isCallActive ? "Type (e.g. हाँ, मुझे भुगतान करना है) and hit Send..." : "Start call to test..."}
               className="flex-1 px-4 py-2.5 rounded-xl bg-slate-900 border border-white/10 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-brand-500 disabled:opacity-50"
             />
             <button

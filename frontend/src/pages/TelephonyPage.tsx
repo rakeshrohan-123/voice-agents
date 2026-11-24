@@ -20,9 +20,11 @@ import {
   ExternalLink
 } from 'lucide-react';
 
+import api from '../services/api';
+
 export const TelephonyPage: React.FC = () => {
   const { user, consumeCall } = useAuth();
-  const [targetNumber, setTargetNumber] = useState('');
+  const [targetNumber, setTargetNumber] = useState('+917901063698');
   const [selectedAgent, setSelectedAgent] = useState('agent_1');
   
   // Default to user's real Sarvam number!
@@ -67,7 +69,7 @@ export const TelephonyPage: React.FC = () => {
     }
   ]);
 
-  const handleDispatchCall = (e: React.FormEvent) => {
+  const handleDispatchCall = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!targetNumber) return;
 
@@ -79,14 +81,22 @@ export const TelephonyPage: React.FC = () => {
     setIsDialing(true);
     setCallStatus(`Initiating SIP handshake with Sarvam Gateway via ${selectedCallerId}...`);
 
-    setTimeout(() => {
-      setCallStatus(`TRAI CLI Verified: Routing outbound call from ${selectedCallerId} to ${targetNumber}...`);
-    }, 1200);
+    try {
+      const resp = await api.post('/telephony/outbound-call', {
+        to_number: targetNumber,
+        from_number: selectedCallerId,
+        agent_id: selectedAgent,
+        customer_name: customerName
+      });
 
-    setTimeout(() => {
+      const data = resp.data;
       setIsDialing(false);
-      setCallStatus(`Call connected! Agent is speaking first greeting on ${targetNumber}. Full recording & analytics available in Monitor.`);
-    }, 2800);
+      setCallStatus(`✅ Call Order Dispatched! Attempt ID: ${data.attempt_id} | ${data.message}`);
+    } catch (err: any) {
+      setIsDialing(false);
+      const errMsg = err.response?.data?.detail || err.message;
+      setCallStatus(`⚠️ Sarvam Dispatch: ${errMsg}`);
+    }
   };
 
   const handleBuyNumber = (e: React.FormEvent) => {
