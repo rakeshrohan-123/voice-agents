@@ -164,8 +164,9 @@ export const DashboardOverview: React.FC = () => {
             <h3 className="text-sm font-bold text-white">Recent Call Dispatches</h3>
             <p className="text-xs text-slate-400">Live call events powered by Sarvam telephony</p>
           </div>
-          <Link to="/telephony" className="text-xs text-brand-400 hover:text-brand-300 font-semibold">
-            View All Calls →
+          <Link to="/call-logs" className="text-xs text-brand-400 hover:text-brand-300 font-semibold flex items-center gap-1">
+            <span>View Live Call Logs</span>
+            <span>→</span>
           </Link>
         </div>
 

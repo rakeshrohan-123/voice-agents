@@ -1,9 +1,17 @@
 import httpx
+import os
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from ..core.config import settings
 
 router = APIRouter()
+
+def get_tts_key() -> str:
+    """Returns the best available Sarvam TTS API key.
+    Prefers SARVAM_TTS_KEY (general API key from app.sarvam.ai).
+    Falls back to SARVAM_API_KEY if TTS key not set.
+    """
+    return os.getenv("SARVAM_TTS_KEY") or os.getenv("SARVAM_API_KEY") or settings.SARVAM_API_KEY
 
 class TTSRequest(BaseModel):
     text: str
@@ -18,12 +26,16 @@ class ChatRequest(BaseModel):
 
 @router.post("/tts")
 async def generate_sarvam_tts(req: TTSRequest):
-    """Generates live speech audio using Sarvam AI Bulbul:v3 API"""
-    if not settings.SARVAM_API_KEY:
-        raise HTTPException(status_code=400, detail="Sarvam API key is not configured")
+    """Generates live speech audio using Sarvam AI Bulbul:v3 API.
+    Returns null audio_base64 gracefully if TTS API key is not authorized,
+    so the frontend can fall back to browser SpeechSynthesis.
+    """
+    tts_key = get_tts_key()
+    if not tts_key:
+        return {"audio_base64": None, "status": "no_key", "fallback": "browser_tts"}
 
     headers = {
-        "API-Subscription-Key": settings.SARVAM_API_KEY,
+        "API-Subscription-Key": tts_key,
         "Content-Type": "application/json"
     }
 
@@ -42,15 +54,15 @@ async def generate_sarvam_tts(req: TTSRequest):
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post("https://api.sarvam.ai/text-to-speech", json=payload, headers=headers)
-            if resp.status_code != 200:
-                raise HTTPException(status_code=resp.status_code, detail=resp.text)
-            data = resp.json()
-            audios = data.get("audios", [])
-            if not audios:
-                raise HTTPException(status_code=500, detail="No audio returned from Sarvam")
-            return {"audio_base64": audios[0], "status": "success"}
+            if resp.status_code == 200:
+                data = resp.json()
+                audios = data.get("audios", [])
+                if audios:
+                    return {"audio_base64": audios[0], "status": "success"}
+            # Non-200: return graceful fallback instead of raising 403/401
+            return {"audio_base64": None, "status": f"sarvam_error_{resp.status_code}", "fallback": "browser_tts"}
     except httpx.HTTPError as e:
-        raise HTTPException(status_code=502, detail=f"Sarvam API error: {str(e)}")
+        return {"audio_base64": None, "status": "network_error", "fallback": "browser_tts", "detail": str(e)}
 
 @router.post("/chat")
 async def playground_chat(req: ChatRequest):
@@ -84,19 +96,21 @@ async def playground_chat(req: ChatRequest):
         "model": "bulbul:v3"
     }
 
+    tts_key = get_tts_key()
     headers = {
-        "API-Subscription-Key": settings.SARVAM_API_KEY,
+        "API-Subscription-Key": tts_key,
         "Content-Type": "application/json"
     }
 
     audio_base64 = None
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post("https://api.sarvam.ai/text-to-speech", json=tts_payload, headers=headers)
-            if resp.status_code == 200:
-                audio_base64 = resp.json().get("audios", [None])[0]
-    except Exception:
-        pass
+    if tts_key:
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post("https://api.sarvam.ai/text-to-speech", json=tts_payload, headers=headers)
+                if resp.status_code == 200:
+                    audio_base64 = resp.json().get("audios", [None])[0]
+        except Exception:
+            pass
 
     return {
         "reply": reply,

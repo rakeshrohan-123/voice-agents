@@ -14,6 +14,7 @@ import { CampaignsPage } from './pages/CampaignsPage';
 import { KnowledgeBasePage } from './pages/KnowledgeBasePage';
 import { PlansPage } from './pages/PlansPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
+import { CallLogsPage } from './pages/CallLogsPage';
 
 // Protected layout wrapper for dashboard pages
 const DashboardLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -47,6 +48,7 @@ const AppContent: React.FC = () => {
     '/telephony',
     '/campaigns',
     '/knowledge',
+    '/call-logs',
     '/admin'
   ].some(path => location.pathname.startsWith(path));
 
@@ -110,6 +112,13 @@ const AppContent: React.FC = () => {
                 <AdminDashboardPage />
               </DashboardLayout>
             </AdminRoute>
+          } />
+
+          {/* Live Call Dashboard */}
+          <Route path="/call-logs" element={
+            <DashboardLayout>
+              <CallLogsPage />
+            </DashboardLayout>
           } />
 
           {/* Fallback */}

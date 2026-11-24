@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { 
   PhoneCall, 
@@ -31,6 +32,7 @@ export const TelephonyPage: React.FC = () => {
   const [selectedCallerId, setSelectedCallerId] = useState('+918064264461');
   const [customerName, setCustomerName] = useState('');
   const [callStatus, setCallStatus] = useState<string | null>(null);
+  const [lastDispatchedId, setLastDispatchedId] = useState<string | null>(null);
   const [isDialing, setIsDialing] = useState(false);
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
 
@@ -93,7 +95,8 @@ export const TelephonyPage: React.FC = () => {
 
       const data = resp.data;
       setIsDialing(false);
-      setCallStatus(`✅ Active Call Connected! Session: ${data.session_id} | Dispatched from ${data.from_number} to ${data.to_number}.`);
+      setLastDispatchedId(data.session_id);
+      setCallStatus(`✅ Call Dispatched! Phone is ringing at ${data.to_number}. Attempt ID: ${data.session_id}`);
 
       // Play the agent's live synthesized Sarvam greeting!
       if (data.audio_base64) {
@@ -263,13 +266,28 @@ export const TelephonyPage: React.FC = () => {
 
           {/* Call Status Feedback */}
           {callStatus && (
-            <div className={`p-3.5 rounded-xl text-xs flex items-start space-x-2.5 ${
-              callStatus.includes('connected') 
+            <div className={`p-4 rounded-2xl text-xs space-y-2.5 ${
+              callStatus.includes('✅') || callStatus.includes('Dispatched')
                 ? 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/30' 
                 : 'bg-brand-500/10 text-brand-300 border border-brand-500/30'
             }`}>
-              <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-              <p className="leading-relaxed">{callStatus}</p>
+              <div className="flex items-start space-x-2.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5 text-emerald-400" />
+                <p className="leading-relaxed font-medium">{callStatus}</p>
+              </div>
+
+              {lastDispatchedId && (
+                <div className="pt-2 border-t border-emerald-500/20 flex items-center justify-between">
+                  <span className="text-[11px] text-emerald-400/80">Monitor live call & recording:</span>
+                  <Link
+                    to="/call-logs"
+                    className="inline-flex items-center gap-1.5 px-3 py-1 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 text-[11px] font-bold border border-emerald-500/40 transition-colors"
+                  >
+                    <span>Open Live Call Logs</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </Link>
+                </div>
+              )}
             </div>
           )}
         </div>

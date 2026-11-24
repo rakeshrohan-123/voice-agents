@@ -18,9 +18,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 480
 
     # Sarvam
-    SARVAM_API_KEY: str = Field(default="sk_kwsro1j5_HZdptYCXPCEsY2QOprPKFQti")
+    SARVAM_API_KEY: str = Field(default="")
     SARVAM_ORG_ID: str = Field(default="demo_org")
     SARVAM_WORKSPACE_ID: str = Field(default="demo_workspace")
+    SARVAM_DEFAULT_APP_ID: str = Field(default="")
+    SARVAM_CONNECTION_ID: str = Field(default="")
+    SARVAM_TTS_KEY: str = Field(default="")
     WEBHOOK_SECRET: str = Field(default="demo_webhook_secret")
 
     # Razorpay

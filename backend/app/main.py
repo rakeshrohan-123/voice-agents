@@ -2,7 +2,7 @@ import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
-from .api import auth, voice, telephony
+from .api import auth, voice, telephony, analytics
 
 app = FastAPI(title="Voice Agents SaaS - Powered by Sarvam AI", version="0.1.0")
 
@@ -19,6 +19,7 @@ app.add_middleware(
 app.include_router(auth.router, prefix="/api/auth", tags=["auth"])
 app.include_router(voice.router, prefix="/api/voice", tags=["voice"])
 app.include_router(telephony.router, prefix="/api/telephony", tags=["telephony"])
+app.include_router(analytics.router, prefix="/api/analytics", tags=["analytics"])
 
 @app.get("/")
 async def root():
