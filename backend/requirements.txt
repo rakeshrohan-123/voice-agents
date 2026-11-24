@@ -1,0 +1,11 @@
+fastapi
+uvicorn[standard]
+sqlalchemy[asyncio]
+asyncpg
+bcrypt
+pyjwt
+python-multipart
+pydantic
+pydantic-settings
+httpx
+razorpay
