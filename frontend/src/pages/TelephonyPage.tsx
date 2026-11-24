@@ -86,12 +86,24 @@ export const TelephonyPage: React.FC = () => {
         to_number: targetNumber,
         from_number: selectedCallerId,
         agent_id: selectedAgent,
-        customer_name: customerName
+        agent_name: selectedAgent === 'agent_1' ? 'Loan Recovery (Hindi)' : 'COD Verification (Hinglish)',
+        customer_name: customerName,
+        language_code: selectedAgent === 'agent_3' ? 'ta-IN' : 'hi-IN'
       });
 
       const data = resp.data;
       setIsDialing(false);
-      setCallStatus(`✅ Call Order Dispatched! Attempt ID: ${data.attempt_id} | ${data.message}`);
+      setCallStatus(`✅ Active Call Connected! Session: ${data.session_id} | Dispatched from ${data.from_number} to ${data.to_number}.`);
+
+      // Play the agent's live synthesized Sarvam greeting!
+      if (data.audio_base64) {
+        try {
+          const audio = new Audio(`data:audio/wav;base64,${data.audio_base64}`);
+          audio.play().catch(e => console.log('Audio autoplay prevented:', e));
+        } catch (e) {
+          console.error(e);
+        }
+      }
     } catch (err: any) {
       setIsDialing(false);
       const errMsg = err.response?.data?.detail || err.message;
